@@ -101,7 +101,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         boolean emptyForAll = true;
         try (IndexReader reader = DirectoryReader.open(dir)) {
             Random r = ThreadLocalRandom.current();
-            
+
             for (int i = 0; i < 10_000; ++i) {
                 //long start = System.nanoTime();
                 long[] countHolder = new long[1];
@@ -112,7 +112,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     long startTime = System.nanoTime();
                     PointValues pointValues = lrc.reader().getPointValues("pointField");
                     PointValues.PointTree pointTree = pointValues.getPointTree();
-                    intersect(intersectVisitor, pointTree, countHolder);
+                    intersectWithPrefetch(intersectVisitor, pointTree, countHolder);
                     Set<Long> set = intersectVisitor.matchingLeafNodesfpDocIds();
                     if (!set.isEmpty()) {
                         System.out.println("For iteration: " + i + " prefetched leaves " + set.size());
@@ -267,6 +267,11 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         };
     }
 
+    public static final void intersectWithPrefetch(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
+        intersectUptoWithPrefetch(visitor, pointTree, countHolder);
+        assert pointTree.moveToParent() == false;
+    }
+
     public static final void intersect(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
         intersectUpto(visitor, pointTree, countHolder);
         assert pointTree.moveToParent() == false;
@@ -280,6 +285,33 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                 // This cell is fully inside the query shape: recursively add all points in this cell
                 // without filtering
                 pointTree.visitDocIDs(visitor);
+            } else if (compare == PointValues.Relation.CELL_CROSSES_QUERY) {
+                // The cell crosses the shape boundary, or the cell fully contains the query, so we fall
+                // through and do full filtering:
+                if (pointTree.moveToChild()) {
+                    continue;
+                }
+                // TODO: we can assert that the first value here in fact matches what the pointTree
+                // claimed?
+                // Leaf node; scan and filter all points in this block:
+                pointTree.visitDocValues(visitor);
+            }
+            while (pointTree.moveToSibling() == false) {
+                if (pointTree.moveToParent() == false) {
+                    return;
+                }
+            }
+        }
+    }
+
+    private static void intersectUptoWithPrefetch(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
+        while (countHolder[0] <= 100_000) {
+            PointValues.Relation compare =
+                    visitor.compare(pointTree.getMinPackedValue(), pointTree.getMaxPackedValue());
+            if (compare == PointValues.Relation.CELL_INSIDE_QUERY) {
+                // This cell is fully inside the query shape: recursively add all points in this cell
+                // without filtering
+                pointTree.prefetchDocIDs(visitor);
             } else if (compare == PointValues.Relation.CELL_CROSSES_QUERY) {
                 // The cell crosses the shape boundary, or the cell fully contains the query, so we fall
                 // through and do full filtering:
