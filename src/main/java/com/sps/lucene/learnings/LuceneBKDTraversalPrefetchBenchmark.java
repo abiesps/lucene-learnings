@@ -115,7 +115,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     intersectWithPrefetch(intersectVisitor, pointTree, countHolder);
                     Set<Long> set = intersectVisitor.matchingLeafNodesfpDocIds();
                     if (!set.isEmpty()) {
-                        System.out.println("For iteration: " + i + " prefetched leaves " + set.size());
+                        //System.out.println("For iteration: " + i + " prefetched leaves " + set.size());
                         emptyForAll = false;
                     }
                     pointTree.visitMatchingDocIDs(intersectVisitor);
