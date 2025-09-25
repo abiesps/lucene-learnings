@@ -63,12 +63,12 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                 ) {
                     ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
                     AtomicLong indexed = new AtomicLong(0);
-                    for (int task = 0; task < 1000; ++task) {
+                    for (int task = 0; task < 10_000; ++task) {
                         executor.execute(() -> {
                             Random r = ThreadLocalRandom.current();
-                            for (int i = 0; i < 10000; ++i) {
+                            for (int i = 0; i < 1000_000; ++i) {
                                 Document doc = new Document();
-                                for (int j = 0; j < 10000; ++j) {
+                                for (int j = 0; j < 10_000; ++j) {
                                     doc.add(new IntField("pointField", r.nextInt(100_000_000), Field.Store.NO));
                                 }
                                 try {
