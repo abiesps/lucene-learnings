@@ -84,6 +84,8 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         private static long listMax(List<Long> xs) { return xs.isEmpty() ? 0L : xs.get(xs.size()-1); }
     }
 
+    static String DATA = "/home/ec2-user/workspace/bkd-prefetch/lucene-learnings/temp_data";
+
     public static void main(String[] args) throws Exception {
 
         String tempData = "temp_data";
@@ -147,6 +149,8 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
         // Single-mode quick path
         if ("prefetch".equalsIgnoreCase(mode) || "no_prefetch".equalsIgnoreCase(mode)) {
+            vmtouchEvictAll(DATA);     // proactive eviction per-file
+            vmtouchReport(DATA);
             dropPageCache();
             runSync();
             runClearScript();
@@ -175,6 +179,8 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     boolean prefetchFirst = (iter % 2 == 0);
 
                     if (prefetchFirst) {
+                        vmtouchEvictAll(DATA);     // proactive eviction per-file
+                        vmtouchReport(DATA);
                         dropPageCache();
                         runSync();
                         runClearScript();
@@ -182,6 +188,9 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                         dropPageCache();
                         runFincoreCheck("/home/ec2-user/workspace/bkd-prefetch/lucene-learnings/temp_data");
                         Stats pre = searchWithPrefetching(reader);
+                        
+                        vmtouchEvictAll(DATA);     // proactive eviction per-file
+                        vmtouchReport(DATA);
                         dropPageCache();
                         runSync();
                         runClearScript();
@@ -218,6 +227,64 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         }
 
         System.err.println("Unknown mode: " + mode + " (use prefetch | no_prefetch | both | ingest)");
+    }
+
+    // --- vmtouch helpers ---
+
+    // Evict every file under `root` from the OS page cache using vmtouch -e
+// Equivalent to: find root -type f -print0 | xargs -0 -I {} sudo vmtouch -e "{}"
+    private static void vmtouchEvictAll(String root) {
+        String cmd = "find " + shQuote(root) + " -type f -print0"
+                + " | xargs -0 -I {} sudo vmtouch -q -e {}";
+        execAndStreamBash(cmd, "[VMTOUCH-EVICT]");
+    }
+
+    // Report resident pages for all files under `root`
+// Equivalent to: find root -type f -print0 | xargs -0 -n 128 vmtouch
+    private static void vmtouchReport(String root) {
+        String cmd = "find " + shQuote(root) + " -type f -print0"
+                + " | xargs -0 -n 128 vmtouch";
+        execAndStreamBash(cmd, "[VMTOUCH-REPORT]");
+    }
+
+    // Return true if vmtouch binary exists (so we can skip gracefully)
+    private static boolean hasVmtouch() {
+        int rc = execAndWait("bash", "-lc", "command -v vmtouch >/dev/null 2>&1");
+        return rc == 0;
+    }
+
+    // --- generic shell helpers you already have variants of; reuse or add these ---
+    private static int execAndWait(String... argv) {
+        try {
+            Process p = new ProcessBuilder(argv).redirectErrorStream(true).start();
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                while (r.readLine() != null) { /* swallow output */ }
+            }
+            return p.waitFor();
+        } catch (Exception e) {
+            System.err.println("[EXEC] " + String.join(" ", argv) + " failed: " + e);
+            return -1;
+        }
+    }
+
+    private static void execAndStreamBash(String command, String tag) {
+        try {
+            Process p = new ProcessBuilder("bash", "-lc", command)
+                    .redirectErrorStream(true).start();
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                String line; boolean any=false;
+                while ((line = r.readLine()) != null) { any=true; System.out.println(tag + " " + line); }
+                int rc = p.waitFor();
+                if (!any) System.out.println(tag + " (no output)");
+                if (rc != 0) System.err.println(tag + " non-zero exit " + rc);
+            }
+        } catch (Exception e) {
+            System.err.println(tag + " error: " + e);
+        }
+    }
+
+    private static String shQuote(String s) {
+        return "'" + s.replace("'", "'\\''") + "'";
     }
 
     private static void runFincoreCheck(String root) {
