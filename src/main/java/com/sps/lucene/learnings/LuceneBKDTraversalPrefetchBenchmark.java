@@ -186,8 +186,20 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                         runClearScript();
                         runSync();
                         dropPageCache();
-                        runFincoreCheck("/home/ec2-user/workspace/bkd-prefetch/lucene-learnings/temp_data");
+                        runFincoreCheck(DATA);
                         Stats pre = searchWithPrefetching(reader);
+
+                        vmtouchEvictAll(DATA);     // proactive eviction per-file
+                        vmtouchReport(DATA);
+                        dropPageCache();
+                        runSync();
+                        runClearScript();
+                        runSync();
+                        dropPageCache();
+                        runFincoreCheck(DATA);
+                        
+                        runClearScript();
+                        runSync();
                         
                         vmtouchEvictAll(DATA);     // proactive eviction per-file
                         vmtouchReport(DATA);
@@ -195,12 +207,9 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                         runSync();
                         runClearScript();
                         runSync();
-
                         dropPageCache();
-                        runSync();
-                        runClearScript();
-                        runSync();
-                        runFincoreCheck("/home/ec2-user/workspace/bkd-prefetch/lucene-learnings/temp_data");
+                        runFincoreCheck(DATA);
+                        
                         Stats base = searchWithoutPrefetching(reader);
                         dropPageCache();
                         runSync();
@@ -350,7 +359,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
     private static void dropPageCache() {
         try {
-            int rc = runCmd("sudo", "sh", "-c", "sync; echo 1 > /proc/sys/vm/drop_caches");
+            int rc = runCmd("sudo", "sh", "-c", "sync; echo 3 > /proc/sys/vm/drop_caches");
             if (rc != 0) System.err.println("[WARN] drop_caches rc=" + rc);
             Thread.sleep(100); // small settle
         } catch (Exception e) {
