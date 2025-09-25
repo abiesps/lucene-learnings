@@ -36,7 +36,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
         String tempData  = "temp_data";
         Path dirPath = (args.length==0) ? Paths.get(tempData): Paths.get(args[0]);
-
+        boolean testWithPrefetch = args[1].equalsIgnoreCase("prefetch");
 
         Directory dir = FSDirectory.open(dirPath);
         if (DirectoryReader.indexExists(dir) == false) {
@@ -80,8 +80,12 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             }
         }
 
-        //searchWithoutPrefetching(dir);
-        searchWithPrefetching(dir);
+        if (testWithPrefetch) {
+            searchWithPrefetching(dir);
+        } else {
+            searchWithoutPrefetching(dir);
+        }
+        
     }
 
     private static void searchWithPrefetching(Directory dir) throws IOException {
