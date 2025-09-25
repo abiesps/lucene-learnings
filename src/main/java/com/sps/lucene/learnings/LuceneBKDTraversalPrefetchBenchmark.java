@@ -180,6 +180,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                         runClearScript();
                         runSync();
                         dropPageCache();
+                        runFincoreCheck("/home/ec2-user/workspace/bkd-prefetch/lucene-learnings/temp_data");
                         Stats pre = searchWithPrefetching(reader);
                         dropPageCache();
                         runSync();
@@ -190,6 +191,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                         runSync();
                         runClearScript();
                         runSync();
+                        runFincoreCheck("/home/ec2-user/workspace/bkd-prefetch/lucene-learnings/temp_data");
                         Stats base = searchWithoutPrefetching(reader);
                         dropPageCache();
                         runSync();
@@ -216,6 +218,49 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         }
 
         System.err.println("Unknown mode: " + mode + " (use prefetch | no_prefetch | both | ingest)");
+    }
+
+    private static void runFincoreCheck(String root) {
+        // Shows only files with non-zero cached/resident pages.
+        String cmd = String.join(" ",
+                "bash", "-lc",
+                "'find", escape(root), "-type f -print0",
+                "| xargs -0 -n 128 fincore 2>/dev/null",
+                "| egrep -i \"cached|resident\"",
+                "| egrep -v \"(:|\\s)(0|0 pages|0 cached|resident: 0)\"'",
+                ""
+        ).trim();
+        execAndStream(cmd, "[FINCORE]");
+    }
+
+    private static void execAndStream(String command, String tag) {
+        try {
+            Process p = new ProcessBuilder("bash", "-lc", command)
+                    .redirectErrorStream(true)
+                    .start();
+            try (java.io.BufferedReader r =
+                         new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
+                String line;
+                boolean printed = false;
+                while ((line = r.readLine()) != null) {
+                    printed = true;
+                    System.out.println(tag + " " + line);
+                }
+                int rc = p.waitFor();
+                if (!printed) {
+                    System.out.println(tag + " (no output)");
+                }
+                if (rc != 0) {
+                    System.err.println(tag + " non-zero exit " + rc);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println(tag + " error: " + e);
+        }
+    }
+
+    private static String escape(String s) {
+        return s.replace("'", "'\\''"); // minimal shell-safe escaping for single quotes
     }
 
     private static long median(List<Long> xs) {
