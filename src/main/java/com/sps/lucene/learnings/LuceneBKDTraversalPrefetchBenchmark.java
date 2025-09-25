@@ -299,7 +299,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     }
 
     private static void intersectUpto(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
-        while (countHolder[0] <= 100_000) {
+        while (countHolder[0] <= 10_000) {
             PointValues.Relation compare =
                     visitor.compare(pointTree.getMinPackedValue(), pointTree.getMaxPackedValue());
             if (compare == PointValues.Relation.CELL_INSIDE_QUERY) {
@@ -326,7 +326,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     }
 
     private static void intersectUptoWithPrefetch(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
-        while (countHolder[0] <= 100_000) {
+        while (countHolder[0] <= 10_000) {
             PointValues.Relation compare =
                     visitor.compare(pointTree.getMinPackedValue(), pointTree.getMaxPackedValue());
             if (compare == PointValues.Relation.CELL_INSIDE_QUERY) {
