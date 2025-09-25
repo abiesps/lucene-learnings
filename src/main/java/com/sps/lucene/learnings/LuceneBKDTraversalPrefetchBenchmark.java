@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
@@ -171,7 +172,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         return new PointValues.IntersectVisitor() {
             // This version of `visit` gets called when we know that every doc in the current leaf node matches.
             int lastMatchingLeafOrdinal = -1;
-            Set<Long> matchingLeafBlocksFPsDocIds = new HashSet<>();
+            Set<Long> matchingLeafBlocksFPsDocIds = new LinkedHashSet<>();
 
             @Override
             public void visit(int docID) throws IOException {
