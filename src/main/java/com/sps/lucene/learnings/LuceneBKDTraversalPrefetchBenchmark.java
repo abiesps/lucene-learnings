@@ -105,7 +105,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         try (IndexReader reader = DirectoryReader.open(dir)) {
             IndexSearcher searcher = new IndexSearcher(reader);
             Random r = ThreadLocalRandom.current();
-            for (int i = 0; i < 10_000; ++i) {
+            for (int i = 0; i < 10; ++i) {
                 //long start = System.nanoTime();
                 long[] countHolder = new long[1];
                 int minValue = r.nextInt(1000);
