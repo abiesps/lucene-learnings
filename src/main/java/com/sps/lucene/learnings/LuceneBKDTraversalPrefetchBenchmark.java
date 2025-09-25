@@ -37,8 +37,8 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 public class LuceneBKDTraversalPrefetchBenchmark {
 
     static Random base = new Random(42);
-    static final int MEASURE_ITERS_DEFAULT = 3;   // default number of A/B iterations
-    static final int QUERIES_PER_ITER = 1000;     // per your current loops
+    static final int MEASURE_ITERS_DEFAULT = 10;   // default number of A/B iterations
+    static final int QUERIES_PER_ITER = 100;     // per your current loops
     static List<int[]> ranges = new ArrayList<>(QUERIES_PER_ITER);
     static {
         for (int i = 0; i < QUERIES_PER_ITER; i++) {
@@ -121,7 +121,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             }
             return;
         }
-        
+
 
         // Comparison mode: multiple iterations, each iteration runs BOTH modes with cache clears
         if ("both".equalsIgnoreCase(mode)) {
@@ -267,7 +267,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         }
         return stats;
     }
-    
+
 
     private static void reportIteration(Stats pre, Stats base) {
         System.out.println("Visited (prefetch):   " + pre.totalVisited);
@@ -278,8 +278,8 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         System.out.printf("prefetch   p50=%dns p90=%dns p99=%dns%n", pre.p50(), pre.p90(), pre.p99());
         System.out.printf("no-pref    p50=%dns p90=%dns p99=%dns%n", base.p50(), base.p90(), base.p99());
     }
-    
-    
+
+
     private static void searchWithPrefetching(Directory dir) throws IOException {
         List<Long> latencies = new ArrayList<>();
 //        List<Long> traversalsTimes   = new ArrayList<>();
