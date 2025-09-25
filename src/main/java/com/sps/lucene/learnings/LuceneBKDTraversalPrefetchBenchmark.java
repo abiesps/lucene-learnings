@@ -58,17 +58,17 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                 try (IndexWriter w = new IndexWriter(dir, new IndexWriterConfig()
                         .setMergePolicy(mp)
                         .setRAMBufferSizeMB(1024)
-                        .setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND))
+                        .setOpenMode(IndexWriterConfig.OpenMode.APPEND))
 
                 ) {
                     ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
                     AtomicLong indexed = new AtomicLong(0);
-                    for (int task = 0; task < 10_000; ++task) {
+                    for (int task = 0; task < 1000; ++task) {
                         executor.execute(() -> {
                             Random r = ThreadLocalRandom.current();
-                            for (int i = 0; i < 1000_000; ++i) {
+                            for (int i = 0; i < 10_000; ++i) {
                                 Document doc = new Document();
-                                for (int j = 0; j < 10_000; ++j) {
+                                for (int j = 0; j < 10000; ++j) {
                                     doc.add(new IntField("pointField", r.nextInt(100_000_000), Field.Store.NO));
                                 }
                                 try {
@@ -77,7 +77,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                                     throw new UncheckedIOException(e);
                                 }
                                 final long actualIndexed = indexed.incrementAndGet();
-                                //810000
+                                //810_000
                                 if (actualIndexed % 10_000 == 0) {
                                     System.out.println("Indexed: " + actualIndexed);
                                 }
