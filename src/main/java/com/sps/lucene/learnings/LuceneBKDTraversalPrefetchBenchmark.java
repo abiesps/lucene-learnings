@@ -135,13 +135,13 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         long p90nanos = latencies.get(latencies.size() * 9 / 10);
         long p99nanos = latencies.get(latencies.size() * 99 / 100);
 
-        long p50TreeTraversalnanos = latencies.get(traversalsTimes.size() / 2);
-        long p90TreeTraversalnanos = latencies.get(traversalsTimes.size() * 9 / 10);
-        long p99TreeTraversalnanos = latencies.get(traversalsTimes.size() * 99 / 100);
+        long p50TreeTraversalnanos = traversalsTimes.get(traversalsTimes.size() / 2);
+        long p90TreeTraversalnanos = traversalsTimes.get(traversalsTimes.size() * 9 / 10);
+        long p99TreeTraversalnanos = traversalsTimes.get(traversalsTimes.size() * 99 / 100);
 
-        long p50Visitnanos = latencies.get(visitTimes.size() / 2);
-        long p90Visitnanos = latencies.get(visitTimes.size() * 9 / 10);
-        long p99Visitnanos = latencies.get(visitTimes.size() * 99 / 100);
+        long p50Visitnanos = visitTimes.get(visitTimes.size() / 2);
+        long p90Visitnanos = visitTimes.get(visitTimes.size() * 9 / 10);
+        long p99Visitnanos = visitTimes.get(visitTimes.size() * 99 / 100);
 
         System.out.println("p50 :" + p50nanos + " nanos " );
         System.out.println("p90 : " + p90nanos + " nanos ");
