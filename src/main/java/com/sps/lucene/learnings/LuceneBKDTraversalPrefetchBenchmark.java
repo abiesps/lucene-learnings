@@ -204,6 +204,10 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                 countHolder[0]++;
             }
 
+            @Override
+            public void visitAfterPrefetch(int docID) throws IOException {
+                //countHolder[0]++;
+            }
             // This version of `visit` is called when the current leaf node partially matches the range.
             @Override
             public void visit(int docID, byte[] packedValue) throws IOException {
@@ -295,7 +299,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     }
 
     private static void intersectUpto(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
-        while (countHolder[0] <= 10_000) {
+        while (countHolder[0] <= 100_000) {
             PointValues.Relation compare =
                     visitor.compare(pointTree.getMinPackedValue(), pointTree.getMaxPackedValue());
             if (compare == PointValues.Relation.CELL_INSIDE_QUERY) {
@@ -322,7 +326,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     }
 
     private static void intersectUptoWithPrefetch(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
-        while (countHolder[0] <= 10_000) {
+        while (countHolder[0] <= 100_000) {
             PointValues.Relation compare =
                     visitor.compare(pointTree.getMinPackedValue(), pointTree.getMaxPackedValue());
             if (compare == PointValues.Relation.CELL_INSIDE_QUERY) {
