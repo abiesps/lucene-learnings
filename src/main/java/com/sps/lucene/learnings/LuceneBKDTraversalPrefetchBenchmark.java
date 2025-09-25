@@ -44,25 +44,29 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         else if (args[1].equalsIgnoreCase("ingest")) {
             ingest=true;
         }
-        
-        
+
+
 
         Directory dir = FSDirectory.open(dirPath);
+
         if (ingest) {
-            if (DirectoryReader.indexExists(dir) == false) {
+            //if (DirectoryReader.indexExists(dir) == false) {
                 TieredMergePolicy mp = new TieredMergePolicy();
                 mp.setSegmentsPerTier(100);
                 mp.setMaxMergeAtOnce(100);
                 mp.setMaxMergedSegmentMB(1024);
                 try (IndexWriter w = new IndexWriter(dir, new IndexWriterConfig()
                         .setMergePolicy(mp)
-                        .setRAMBufferSizeMB(1024))) {
+                        .setRAMBufferSizeMB(1024)
+                        .setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND))
+
+                ) {
                     ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
                     AtomicLong indexed = new AtomicLong(0);
-                    for (int task = 0; task < 10_000; ++task) {
+                    for (int task = 0; task < 1000; ++task) {
                         executor.execute(() -> {
                             Random r = ThreadLocalRandom.current();
-                            for (int i = 0; i < 1_000_000; ++i) {
+                            for (int i = 0; i < 10000; ++i) {
                                 Document doc = new Document();
                                 for (int j = 0; j < 10000; ++j) {
                                     doc.add(new IntField("pointField", r.nextInt(100_000_000), Field.Store.NO));
@@ -73,6 +77,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                                     throw new UncheckedIOException(e);
                                 }
                                 final long actualIndexed = indexed.incrementAndGet();
+                                //810000
                                 if (actualIndexed % 10_000 == 0) {
                                     System.out.println("Indexed: " + actualIndexed);
                                 }
@@ -88,7 +93,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     System.out.println("Done force merging");
                     w.commit();
                 }
-            }
+           // }
 
         }
         if (testWithPrefetch) {
