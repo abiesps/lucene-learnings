@@ -98,7 +98,6 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
     private static void searchWithPrefetching(Directory dir) throws IOException {
         List<Long> latencies = new ArrayList<>();
-        boolean emptyForAll = true;
         try (IndexReader reader = DirectoryReader.open(dir)) {
             Random r = ThreadLocalRandom.current();
 
@@ -113,18 +112,13 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     PointValues pointValues = lrc.reader().getPointValues("pointField");
                     PointValues.PointTree pointTree = pointValues.getPointTree();
                     intersectWithPrefetch(intersectVisitor, pointTree, countHolder);
-                    Set<Long> set = intersectVisitor.matchingLeafNodesfpDocIds();
-                    if (!set.isEmpty()) {
-                        //System.out.println("For iteration: " + i + " prefetched leaves " + set.size());
-                        emptyForAll = false;
-                    }
                     pointTree.visitMatchingDocIDs(intersectVisitor);
                     long endTime = System.nanoTime();
                     latencies.add(endTime - startTime);
                 }
             }
         }
-        System.out.println("Empty for all " + emptyForAll );
+       
         latencies.sort(null);
         long p50nanos = latencies.get(latencies.size() / 2);
         long p90nanos = latencies.get(latencies.size() * 9 / 10);
