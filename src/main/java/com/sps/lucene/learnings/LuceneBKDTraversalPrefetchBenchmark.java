@@ -46,16 +46,9 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             ingest=true;
         }
 
-
-
         Directory dir = FSDirectory.open(dirPath);
-
         if (ingest) {
             if (DirectoryReader.indexExists(dir) == false) {
-//                TieredMergePolicy mp = new TieredMergePolicy();
-//                mp.setSegmentsPerTier(100);
-//                mp.setMaxMergeAtOnce(100);
-//                mp.setMaxMergedSegmentMB(1024);
             IndexWriterConfig indexWriterConfig = new IndexWriterConfig().setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND)
                     .setRAMBufferSizeMB(10240);
                 try (IndexWriter w = new IndexWriter(dir, indexWriterConfig)) {
@@ -105,21 +98,17 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     private static void searchWithPrefetching(Directory dir) throws IOException {
         List<Long> latencies = new ArrayList<>();
         try (IndexReader reader = DirectoryReader.open(dir)) {
-            IndexSearcher searcher = new IndexSearcher(reader);
             Random r = ThreadLocalRandom.current();
             for (int i = 0; i < 10_000; ++i) {
                 //long start = System.nanoTime();
                 long[] countHolder = new long[1];
                 int minValue = r.nextInt(1000);
                 int maxValue = r.nextInt(100_000_000);
-
                 PointValues.IntersectVisitor intersectVisitor = getIntersectVisitorWithPrefetching(minValue, maxValue, countHolder);
-
                 for (LeafReaderContext lrc : reader.leaves()) {
                     long startTime = System.nanoTime();
                     PointValues pointValues = lrc.reader().getPointValues("pointField");
                     PointValues.PointTree pointTree = pointValues.getPointTree();
-                   // pointValues.intersect(intersectVisitor);
                     intersect(intersectVisitor, pointTree, countHolder);
                     pointTree.visitMatchingDocIDs(intersectVisitor);
                     long endTime = System.nanoTime();
@@ -143,7 +132,6 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     private static void searchWithoutPrefetching(Directory dir) throws IOException {
         List<Long> latencies = new ArrayList<>();
         try (IndexReader reader = DirectoryReader.open(dir)) {
-            IndexSearcher searcher = new IndexSearcher(reader);
             Random r = ThreadLocalRandom.current();
             for (int i = 0; i < 10_000; ++i) {
                 long start = System.nanoTime();
@@ -272,7 +260,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     }
 
     private static void intersectUpto(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
-        while (countHolder[0] <= 10_000) {
+        while (countHolder[0] <= 100_000) {
             PointValues.Relation compare =
                     visitor.compare(pointTree.getMinPackedValue(), pointTree.getMaxPackedValue());
             if (compare == PointValues.Relation.CELL_INSIDE_QUERY) {
