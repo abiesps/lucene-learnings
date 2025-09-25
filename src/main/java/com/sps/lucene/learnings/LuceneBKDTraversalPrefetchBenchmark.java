@@ -88,10 +88,10 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             }
 
         }
-        if (testWithPrefetch) {
-            searchWithPrefetching(dir);
-        } else {
+        if (!testWithPrefetch) {
             searchWithoutPrefetching(dir);
+        } else {
+            searchWithPrefetching(dir);
         }
 
     }
