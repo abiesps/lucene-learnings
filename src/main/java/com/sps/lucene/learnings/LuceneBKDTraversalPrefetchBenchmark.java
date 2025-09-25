@@ -173,6 +173,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             // This version of `visit` gets called when we know that every doc in the current leaf node matches.
             int lastMatchingLeafOrdinal = -1;
             Set<Long> matchingLeafBlocksFPsDocIds = new LinkedHashSet<>();
+            List<Long> list = new ArrayList<>(); 
 
             @Override
             public void visit(int docID) throws IOException {
@@ -199,15 +200,18 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
             @Override
             public  Set<Long> matchingLeafNodesfpDocIds() {
+                assert list.size() == matchingLeafBlocksFPsDocIds.size();
                return matchingLeafBlocksFPsDocIds;
             }
 
             @Override
             public void matchedLeafFpDocIds(long fp, int count) {
                matchingLeafBlocksFPsDocIds.add(fp);
+                list.add(fp);
                 countHolder[0] += count;
             };
 
+            
 
             @Override
             public PointValues.Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
