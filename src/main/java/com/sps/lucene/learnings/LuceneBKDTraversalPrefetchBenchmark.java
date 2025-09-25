@@ -147,9 +147,15 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
         // Single-mode quick path
         if ("prefetch".equalsIgnoreCase(mode) || "no_prefetch".equalsIgnoreCase(mode)) {
-            dropPageCache(); runClearScript();
+            dropPageCache();
+            runSync();
+            runClearScript();
+            runSync();
             Stats s = "prefetch".equalsIgnoreCase(mode) ? searchWithPrefetching(dir) : searchWithoutPrefetching(dir);
-            dropPageCache(); runClearScript();
+            dropPageCache();
+            runSync();
+            runClearScript();
+            runSync();
 
             s.sort();
             System.out.println("Visited: " + s.totalVisited);
@@ -169,13 +175,26 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     boolean prefetchFirst = (iter % 2 == 0);
 
                     if (prefetchFirst) {
-                        dropPageCache(); runClearScript();
+                        dropPageCache();
+                        runSync();
+                        runClearScript();
+                        runSync();
+                        dropPageCache();
                         Stats pre = searchWithPrefetching(reader);
-                        dropPageCache(); runClearScript();
+                        dropPageCache();
+                        runSync();
+                        runClearScript();
+                        runSync();
 
-                        dropPageCache(); runClearScript();
+                        dropPageCache();
+                        runSync();
+                        runClearScript();
+                        runSync();
                         Stats base = searchWithoutPrefetching(reader);
-                        dropPageCache(); runClearScript();
+                        dropPageCache();
+                        runSync();
+                        runClearScript();
+                        runSync();
 
                         pre.sort(); base.sort();
                         reportIteration(pre, base);
@@ -209,7 +228,10 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     private static int runCmd(String... argv) throws IOException, InterruptedException {
         Process p = new ProcessBuilder(argv).redirectErrorStream(true).start();
         try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-            while (r.readLine() != null) { /* swallow output */ }
+            //String line = null;
+            while (r.readLine() != null) {
+              //  System.out.println(r.);/* swallow output */
+                }
         }
         return p.waitFor();
     }
@@ -230,6 +252,15 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             if (rc != 0) System.err.println("[WARN] clear_page_cache.sh rc=" + rc);
         } catch (Exception e) {
             System.err.println("[WARN] Failed running clear_page_cache.sh: " + e);
+        }
+    }
+
+    private static void runSync() {
+        try {
+            int rc = runCmd("sudo", "sync");
+            if (rc != 0) System.err.println("[WARN] sudo sync rc=" + rc);
+        } catch (Exception e) {
+            System.err.println("[WARN] Failed running sudo sync: " + e);
         }
     }
 
