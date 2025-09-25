@@ -98,8 +98,8 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
     private static void searchWithPrefetching(Directory dir) throws IOException {
         List<Long> latencies = new ArrayList<>();
-        List<Long> traversalsTimes   = new ArrayList<>();
-        List<Long> visitTimes      = new ArrayList<>();
+//        List<Long> traversalsTimes   = new ArrayList<>();
+//        List<Long> visitTimes      = new ArrayList<>();
         try (IndexReader reader = DirectoryReader.open(dir)) {
             Random r = ThreadLocalRandom.current();
 
@@ -115,43 +115,43 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     PointValues.PointTree pointTree = pointValues.getPointTree();
                     long startTime = System.nanoTime();
                     intersectWithPrefetch(intersectVisitor, pointTree, countHolder);
-                    long traversalTime = System.nanoTime() - startTime;
-                    long visitStartTime = System.nanoTime();
+//                    long traversalTime = System.nanoTime() - startTime;
+//                    long visitStartTime = System.nanoTime();
                     pointTree.visitMatchingDocIDs(intersectVisitor);
-                    long visitTime = System.nanoTime() - visitStartTime;
+//                    long visitTime = System.nanoTime() - visitStartTime;
                     long endTime = System.nanoTime();
                     latencies.add(endTime - startTime);
-                    traversalsTimes.add(traversalTime);
-                    visitTimes.add(visitTime);
+//                    traversalsTimes.add(traversalTime);
+//                    visitTimes.add(visitTime);
                 }
             }
         }
 
         latencies.sort(null);
-        visitTimes.sort(null);
-        traversalsTimes.sort(null);
+//        visitTimes.sort(null);
+//        traversalsTimes.sort(null);
 
         long p50nanos = latencies.get(latencies.size() / 2);
         long p90nanos = latencies.get(latencies.size() * 9 / 10);
         long p99nanos = latencies.get(latencies.size() * 99 / 100);
 
-        long p50TreeTraversalnanos = traversalsTimes.get(traversalsTimes.size() / 2);
-        long p90TreeTraversalnanos = traversalsTimes.get(traversalsTimes.size() * 9 / 10);
-        long p99TreeTraversalnanos = traversalsTimes.get(traversalsTimes.size() * 99 / 100);
-
-        long p50Visitnanos = visitTimes.get(visitTimes.size() / 2);
-        long p90Visitnanos = visitTimes.get(visitTimes.size() * 9 / 10);
-        long p99Visitnanos = visitTimes.get(visitTimes.size() * 99 / 100);
+//        long p50TreeTraversalnanos = traversalsTimes.get(traversalsTimes.size() / 2);
+//        long p90TreeTraversalnanos = traversalsTimes.get(traversalsTimes.size() * 9 / 10);
+//        long p99TreeTraversalnanos = traversalsTimes.get(traversalsTimes.size() * 99 / 100);
+//
+//        long p50Visitnanos = visitTimes.get(visitTimes.size() / 2);
+//        long p90Visitnanos = visitTimes.get(visitTimes.size() * 9 / 10);
+//        long p99Visitnanos = visitTimes.get(visitTimes.size() * 99 / 100);
 
         System.out.println("p50 :" + p50nanos + " nanos " );
         System.out.println("p90 : " + p90nanos + " nanos ");
         System.out.println("p99 : " + p99nanos + " nanos ");
-        System.out.println("p50Tree traversal : " + p50TreeTraversalnanos + " nanos ");
-        System.out.println("p90Tree traversal : " + p90TreeTraversalnanos + " nanos ");
-        System.out.println("p99Tree traversal : " + p99TreeTraversalnanos + " nanos ");
-        System.out.println("p50Visit : " + p50Visitnanos + " nanos ");
-        System.out.println("p90Visit : " + p90Visitnanos + " nanos ");
-        System.out.println("p99Visit : " + p99Visitnanos + " nanos ");
+//        System.out.println("p50Tree traversal : " + p50TreeTraversalnanos + " nanos ");
+//        System.out.println("p90Tree traversal : " + p90TreeTraversalnanos + " nanos ");
+//        System.out.println("p99Tree traversal : " + p99TreeTraversalnanos + " nanos ");
+//        System.out.println("p50Visit : " + p50Visitnanos + " nanos ");
+//        System.out.println("p90Visit : " + p90Visitnanos + " nanos ");
+//        System.out.println("p99Visit : " + p99Visitnanos + " nanos ");
     }
 
     private static void searchWithoutPrefetching(Directory dir) throws IOException {
