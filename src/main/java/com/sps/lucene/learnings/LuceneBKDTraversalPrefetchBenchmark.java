@@ -20,8 +20,10 @@ import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
@@ -34,7 +36,8 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
         String tempData  = "temp_data";
         Path dirPath = (args.length==0) ? Paths.get(tempData): Paths.get(args[0]);
-        //Paths.get(args[0]);
+
+
         Directory dir = FSDirectory.open(dirPath);
         if (DirectoryReader.indexExists(dir) == false) {
             TieredMergePolicy mp = new TieredMergePolicy();
@@ -76,6 +79,42 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                 w.commit();
             }
         }
+
+        //searchWithoutPrefetching(dir);
+        searchWithPrefetching(dir);
+    }
+
+    private static void searchWithPrefetching(Directory dir) throws IOException {
+        List<Long> latencies = new ArrayList<>();
+        try (IndexReader reader = DirectoryReader.open(dir)) {
+            IndexSearcher searcher = new IndexSearcher(reader);
+            Random r = ThreadLocalRandom.current();
+            for (int i = 0; i < 10_000; ++i) {
+                //long start = System.nanoTime();
+                long[] countHolder = new long[1];
+                int minValue = r.nextInt(1000);
+                int maxValue = r.nextInt(100_000);
+
+                PointValues.IntersectVisitor intersectVisitor = getIntersectVisitorWithPrefetching(minValue, maxValue, countHolder);
+
+                for (LeafReaderContext lrc : reader.leaves()) {
+                    long startTime = System.nanoTime();
+                    PointValues pointValues = lrc.reader().getPointValues("pointField");
+                    PointValues.PointTree pointTree = pointValues.getPointTree();
+                    pointValues.intersect(intersectVisitor);
+                    pointTree.visitMatchingDocIDs(intersectVisitor);
+                    long endTime = System.nanoTime();
+                    latencies.add(endTime - startTime);
+                }
+            }
+        }
+        latencies.sort(null);
+        System.out.println("P50: " + latencies.get(latencies.size() / 2));
+        System.out.println("P90: " + latencies.get(latencies.size() * 9 / 10));
+        System.out.println("P99: " + latencies.get(latencies.size() * 99 / 100));
+    }
+
+    private static void searchWithoutPrefetching(Directory dir) throws IOException {
         List<Long> latencies = new ArrayList<>();
         try (IndexReader reader = DirectoryReader.open(dir)) {
             IndexSearcher searcher = new IndexSearcher(reader);
@@ -102,11 +141,138 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     }
 
 
+    //return new PointValues.IntersectVisitor() {
+    //
+    //            DocIdSetBuilder.BulkAdder adder;
+    //            Set<Long> matchingLeafBlocksFPsDocIds = new LinkedHashSet<>();
+    //            Set<Long> matchingLeafBlocksFPsDocValues = new LinkedHashSet<>();
+    //            TreeMap<Integer, Long> leafOrdinalFPDocIds = new TreeMap<>();
+    //            TreeMap<Integer, Long> leafOrdinalFPDocValues = new TreeMap<>();
+    //            int lastMatchingLeafOrdinal = -1;
+    //
+    //            boolean firstMatchFound = false;
+    //            long firstMatchedFp = -1;
+    //
+    //            @Override
+    //            public void grow(int count) {
+    //                adder = result.grow(count);
+    //            }
+    //
+    //            @Override
+    //            public void visit(int docID) {
+    //                // it is possible that size < 1024 and docCount < size but we will continue to count through all the 1024 docs
+    //                adder.add(docID);
+    //                docCount[0]++;
+    //            }
+    //
+    //            @Override
+    //            public void visit(DocIdSetIterator iterator) throws IOException {
+    //                adder.add(iterator);
+    //            }
+    //
+    //            @Override
+    //            public void visit(IntsRef ref) {
+    //                adder.add(ref);
+    //                docCount[0] += ref.length;
+    //            }
+    //
+    //            @Override
+    //            public void visit(int docID, byte[] packedValue) {
+    //                if (matches(packedValue)) {
+    //                    visit(docID);
+    //                }
+    //            }
+    //
+    //            @Override
+    //            public void visit(DocIdSetIterator iterator, byte[] packedValue) throws IOException {
+    //                if (matches(packedValue)) {
+    //                    adder.add(iterator);
+    //                }
+    //            }
+    //
+    //            @Override
+    //            public PointValues.Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
+    //                return relate(minPackedValue, maxPackedValue);
+    //            }
+    //
+    //            @Override
+    //            public void matchedLeafFpDocIds(long fp, int count) {
+    //                matchingLeafBlocksFPsDocIds.add(fp);
+    //                docCount[0] += count;
+    //            };
+    //
+    //            @Override
+    //            public  Set<Long> matchingLeafNodesfpDocIds() {
+    //                return matchingLeafBlocksFPsDocIds;
+    //            }
+    //
+    //            @Override
+    //            public void matchedLeafFpDocValues(long fp) {
+    //                matchingLeafBlocksFPsDocValues.add(fp);
+    //            };
+    //
+    //            @Override
+    //            public  Set<Long> matchingLeafNodesfpDocValues() {
+    //                return matchingLeafBlocksFPsDocValues;
+    //            }
+    //
+    //            @Override
+    //            public void matchedLeafOrdinalDocIds(int leafOrdinal, long fp, int count) {
+    //                leafOrdinalFPDocIds.put(leafOrdinal, fp);
+    //            };
+    //
+    //            @Override
+    //            public void matchedLeafOrdinalDocValues(int leafOrdinal, long fp) {
+    //                leafOrdinalFPDocValues.put(leafOrdinal, fp);
+    //            };
+    //
+    //            @Override
+    //            public Map<Integer,Long> matchingLeafNodesDocValues() {
+    //                return leafOrdinalFPDocValues;
+    //            }
+    //
+    //            @Override
+    //            public Map<Integer,Long> matchingLeafNodesDocIds() {
+    //                return leafOrdinalFPDocIds;
+    //            }
+    //
+    //            @Override
+    //            public int lastMatchingLeafOrdinal() {
+    //                return lastMatchingLeafOrdinal;
+    //            }
+    //
+    //            @Override
+    //            public  void setLastMatchingLeafOrdinal(int leafOrdinal) {
+    //                lastMatchingLeafOrdinal = leafOrdinal;
+    //            }
+    //
+    //            @Override
+    //            public void visitAfterPrefetch(int docID) throws IOException {
+    //                //in.visitAfterPrefetch(docID);
+    //                adder.add(docID);
+    //            }
+    //
+    //            @Override
+    //            public void visitAfterPrefetch(int docID, byte[] packedValue) throws IOException {
+    //                //in.visitAfterPrefetch(docID, packedValue);
+    //                if (matches(packedValue)) {
+    //                    //visit(docID);
+    //                    adder.add(docID);
+    //                }
+    //            };
+    //
+    //
+    //        };
 
-    private static PointValues.IntersectVisitor getIntersectVisitorWithPrefetching(int minValue, int maxValue, long[] countHolder) {
+
+    private static PointValues.IntersectVisitor getIntersectVisitorWithPrefetching(int minValue, int maxValue,
+                                                                                   long[] countHolder) {
 
         return new PointValues.IntersectVisitor() {
             // This version of `visit` gets called when we know that every doc in the current leaf node matches.
+            int lastMatchingLeafOrdinal = -1;
+            Set<Long> matchingLeafBlocksFPsDocIds = new HashSet<>();
+
             @Override
             public void visit(int docID) throws IOException {
                 countHolder[0]++;
@@ -117,9 +283,30 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             public void visit(int docID, byte[] packedValue) throws IOException {
                 int val = IntPoint.decodeDimension(packedValue, 0);
                 if (val >= minValue && val < maxValue) {
-                    countHolder[0]++;
+                    visit(docID);//counter increment automatically
                 }
             }
+
+            @Override
+            public void setLastMatchingLeafOrdinal(int leafOrdinal) {
+                lastMatchingLeafOrdinal = leafOrdinal;
+            }
+
+            public int lastMatchingLeafOrdinal() {
+                return lastMatchingLeafOrdinal;
+            }
+
+            @Override
+            public  Set<Long> matchingLeafNodesfpDocIds() {
+               return matchingLeafBlocksFPsDocIds;
+            }
+
+            @Override
+            public void matchedLeafFpDocIds(long fp, int count) {
+               matchingLeafBlocksFPsDocIds.add(fp);
+                countHolder[0] += count;
+            };
+
 
             @Override
             public PointValues.Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
