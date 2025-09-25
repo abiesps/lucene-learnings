@@ -86,6 +86,19 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
     static String DATA = "/home/ec2-user/workspace/bkd-prefetch/lucene-learnings/temp_data";
 
+
+    private static void clean(String DATA) {
+        vmtouchEvictAll(DATA);     // proactive eviction per-file
+        vmtouchReport(DATA);
+        dropPageCache();
+        runSync();
+        runClearScript();
+        runSync();
+        dropPageCache();
+        runFincoreCheck(DATA);
+        runClearScript();
+        runSync();
+    }
     public static void main(String[] args) throws Exception {
 
         String tempData = "temp_data";
@@ -171,75 +184,49 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
         // Comparison mode: multiple iterations, each iteration runs BOTH modes with cache clears
         if ("both".equalsIgnoreCase(mode)) {
-            try (IndexReader reader = DirectoryReader.open(dir)) {
-                for (int iter = 0; iter < iterations; iter++) {
-                    System.out.println("\n=== Iteration " + (iter + 1) + " / " + iterations + " ===");
+            for (int iter = 0; iter < iterations; iter++) {
+                System.out.println("\n=== Iteration " + (iter + 1) + " / " + iterations + " ===");
 
-                    // Alternate order each iteration to avoid order bias
-                    boolean prefetchFirst = (iter % 2 == 0);
-
-                    if (prefetchFirst) {
-                        vmtouchEvictAll(DATA);     // proactive eviction per-file
-                        vmtouchReport(DATA);
-                        dropPageCache();
-                        runSync();
-                        runClearScript();
-                        runSync();
-                        dropPageCache();
-                        runFincoreCheck(DATA);
-                        Stats pre = searchWithPrefetching(reader);
-
-                        vmtouchEvictAll(DATA);     // proactive eviction per-file
-                        vmtouchReport(DATA);
-                        dropPageCache();
-                        runSync();
-                        runClearScript();
-                        runSync();
-                        dropPageCache();
-                        runFincoreCheck(DATA);
-
-                        runClearScript();
-                        runSync();
-
-                        vmtouchEvictAll(DATA);     // proactive eviction per-file
-                        vmtouchReport(DATA);
-                        dropPageCache();
-                        runSync();
-                        runClearScript();
-                        runSync();
-                        dropPageCache();
-                        runFincoreCheck(DATA);
-
-                        Stats base = searchWithoutPrefetching(reader);
-                        dropPageCache();
-                        runSync();
-                        runClearScript();
-                        runSync();
-
-                        pre.sort(); base.sort();
-                        reportIteration(pre, base);
-                    } else {
-                        dropPageCache(); runClearScript();
-                        Stats base = searchWithoutPrefetching(reader);
-                        dropPageCache(); runClearScript();
-
-                        dropPageCache(); runClearScript();
-                        Stats pre = searchWithPrefetching(reader);
-                        dropPageCache(); runClearScript();
-
-                        pre.sort(); base.sort();
-                        reportIteration(pre, base);
+                // Alternate order each iteration to avoid order bias
+                boolean prefetchFirst = (iter % 2 == 0);
+                if (prefetchFirst) {
+                    clean(DATA);
+                    Stats pre = null;
+                    Stats base = null;
+                    try(IndexReader reader = DirectoryReader.open(dir)) {
+                        clean(DATA);
+                        pre = searchWithPrefetching(reader);
+                        clean(DATA);
                     }
+                    clean(DATA);
+                    try (IndexReader reader = DirectoryReader.open(dir)) {
+                        clean(DATA);
+                        base = searchWithoutPrefetching(reader);
+                        clean(DATA);
+                    }
+                    pre.sort(); base.sort();
+                    reportIteration(pre, base);
+                    clean(DATA);
+                } else {
+                    clean(DATA);
+                    Stats pre = null;
+                    Stats base = null;
+                    try(IndexReader reader = DirectoryReader.open(dir)) {
+                        clean(DATA);
+                        base = searchWithoutPrefetching(reader);
+                        clean(DATA);
+                    }
+                    clean(DATA);
+                    try (IndexReader reader = DirectoryReader.open(dir)) {
+                        clean(DATA);
+                        pre = searchWithPrefetching(reader);
+                        clean(DATA);
+                    }
+                    pre.sort(); base.sort();
+                    reportIteration(pre, base);
+                    clean(DATA);
                 }
             }
-            vmtouchEvictAll(DATA);     // proactive eviction per-file
-            vmtouchReport(DATA);
-            dropPageCache();
-            runSync();
-            runClearScript();
-            runSync();
-            dropPageCache();
-            runFincoreCheck(DATA);
             return;
         }
 
