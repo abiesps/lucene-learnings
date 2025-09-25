@@ -197,10 +197,10 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                         runSync();
                         dropPageCache();
                         runFincoreCheck(DATA);
-                        
+
                         runClearScript();
                         runSync();
-                        
+
                         vmtouchEvictAll(DATA);     // proactive eviction per-file
                         vmtouchReport(DATA);
                         dropPageCache();
@@ -209,7 +209,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                         runSync();
                         dropPageCache();
                         runFincoreCheck(DATA);
-                        
+
                         Stats base = searchWithoutPrefetching(reader);
                         dropPageCache();
                         runSync();
@@ -232,6 +232,14 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     }
                 }
             }
+            vmtouchEvictAll(DATA);     // proactive eviction per-file
+            vmtouchReport(DATA);
+            dropPageCache();
+            runSync();
+            runClearScript();
+            runSync();
+            dropPageCache();
+            runFincoreCheck(DATA);
             return;
         }
 
