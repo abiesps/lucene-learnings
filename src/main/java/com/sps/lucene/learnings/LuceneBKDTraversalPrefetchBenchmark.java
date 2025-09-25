@@ -49,13 +49,13 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     .setRAMBufferSizeMB(1024))) {
                 ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
                 AtomicLong indexed = new AtomicLong(0);
-                for (int task = 0; task < 2; ++task) {
+                for (int task = 0; task < 10_000; ++task) {
                     executor.execute(() -> {
                         Random r = ThreadLocalRandom.current();
-                        for (int i = 0; i < 10; ++i) {
+                        for (int i = 0; i < 1_000_000; ++i) {
                             Document doc = new Document();
-                            for (int j = 0; j < 10; ++j) {
-                                doc.add(new IntField("pointField", r.nextInt(1000_000), Field.Store.NO));
+                            for (int j = 0; j < 10000; ++j) {
+                                doc.add(new IntField("pointField", r.nextInt(100_000_000), Field.Store.NO));
                             }
                             try {
                                 w.addDocument(doc);
@@ -85,7 +85,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         } else {
             searchWithoutPrefetching(dir);
         }
-        
+
     }
 
     private static void searchWithPrefetching(Directory dir) throws IOException {
@@ -97,7 +97,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                 //long start = System.nanoTime();
                 long[] countHolder = new long[1];
                 int minValue = r.nextInt(1000);
-                int maxValue = r.nextInt(100_000);
+                int maxValue = r.nextInt(100_000_000);
 
                 PointValues.IntersectVisitor intersectVisitor = getIntersectVisitorWithPrefetching(minValue, maxValue, countHolder);
 
