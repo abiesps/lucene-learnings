@@ -10,18 +10,17 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.PointValues;
-import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.RandomAccessFile;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
@@ -53,12 +52,36 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     // ---------- simple stats container ----------
     static class Stats {
         final List<Long> latencies = new ArrayList<>();
+        final List<Long> majfltDeltas = new ArrayList<>();
         long totalVisited = 0;
+
         void addLatency(long nanos) { latencies.add(nanos); }
-        long p50() { return latencies.get(latencies.size() / 2); }
-        long p90() { return latencies.get(latencies.size() * 9 / 10); }
-        long p99() { return latencies.get(latencies.size() * 99 / 100); }
-        void sort() { latencies.sort(null); }
+        void addMajfltDelta(long delta) { if (delta >= 0) majfltDeltas.add(delta); }
+
+        void sort() {
+            latencies.sort(null);
+            majfltDeltas.sort(null);
+        }
+
+        long p50() { return percentile(latencies, 50); }
+        long p90() { return percentile(latencies, 90); }
+        long p99() { return percentile(latencies, 99); }
+
+        long majMin() { return listMin(majfltDeltas); }
+        long majMax() { return listMax(majfltDeltas); }
+        long majP50() { return percentile(majfltDeltas, 50); }
+        long majP90() { return percentile(majfltDeltas, 90); }
+        long majP99() { return percentile(majfltDeltas, 99); }
+
+        private static long percentile(List<Long> xs, int p) {
+            if (xs == null || xs.isEmpty()) return 0L;
+            int idx = (int) Math.floor((p / 100.0) * (xs.size() - 1));
+            if (idx < 0) idx = 0;
+            if (idx >= xs.size()) idx = xs.size() - 1;
+            return xs.get(idx);
+        }
+        private static long listMin(List<Long> xs) { return xs.isEmpty() ? 0L : xs.get(0); }
+        private static long listMax(List<Long> xs) { return xs.isEmpty() ? 0L : xs.get(xs.size()-1); }
     }
 
     public static void main(String[] args) throws Exception {
@@ -94,7 +117,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                             for (int i1 = 0; i1 < 1000; ++i1) {
                                 Document doc = new Document();
                                 for (int j = 0; j < 10_000; ++j) {
-                                    // NOTE: Keeping your original field type, per your request not to change visitors/intersect usage
+                                    // Keeping your original field type
                                     doc.add(new IntField("pointField", r.nextInt(100_000_000), Field.Store.NO));
                                 }
                                 try {
@@ -122,16 +145,22 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             return;
         }
 
+        // Single-mode quick path
+        if ("prefetch".equalsIgnoreCase(mode) || "no_prefetch".equalsIgnoreCase(mode)) {
+            dropPageCache(); runClearScript();
+            Stats s = "prefetch".equalsIgnoreCase(mode) ? searchWithPrefetching(dir) : searchWithoutPrefetching(dir);
+            dropPageCache(); runClearScript();
+
+            s.sort();
+            System.out.println("Visited: " + s.totalVisited);
+            System.out.printf("lat   p50=%dns p90=%dns p99=%dns%n", s.p50(), s.p90(), s.p99());
+            System.out.printf("majflt min=%d max=%d p50=%d p90=%d p99=%d%n",
+                    s.majMin(), s.majMax(), s.majP50(), s.majP90(), s.majP99());
+            return;
+        }
 
         // Comparison mode: multiple iterations, each iteration runs BOTH modes with cache clears
         if ("both".equalsIgnoreCase(mode)) {
-            List<Long> allP50Pref = new ArrayList<>();
-            List<Long> allP50Base  = new ArrayList<>();
-            List<Long> allP90Pref = new ArrayList<>();
-            List<Long> allP90Base  = new ArrayList<>();
-            List<Long> allP99Pref = new ArrayList<>();
-            List<Long> allP99Base  = new ArrayList<>();
-
             try (IndexReader reader = DirectoryReader.open(dir)) {
                 for (int iter = 0; iter < iterations; iter++) {
                     System.out.println("\n=== Iteration " + (iter + 1) + " / " + iterations + " ===");
@@ -150,9 +179,6 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
                         pre.sort(); base.sort();
                         reportIteration(pre, base);
-                        allP50Pref.add(pre.p50()); allP50Base.add(base.p50());
-                        allP90Pref.add(pre.p90()); allP90Base.add(base.p90());
-                        allP99Pref.add(pre.p99()); allP99Base.add(base.p99());
                     } else {
                         dropPageCache(); runClearScript();
                         Stats base = searchWithoutPrefetching(reader);
@@ -164,21 +190,9 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
                         pre.sort(); base.sort();
                         reportIteration(pre, base);
-                        allP50Pref.add(pre.p50()); allP50Base.add(base.p50());
-                        allP90Pref.add(pre.p90()); allP90Base.add(base.p90());
-                        allP99Pref.add(pre.p99()); allP99Base.add(base.p99());
                     }
                 }
             }
-
-            // Final rollup
-            System.out.println("\n=== Summary over " + iterations + " iterations ===");
-            System.out.printf("prefetch  median(p50)=%dns   no-prefetch median(p50)=%dns%n",
-                    median(allP50Pref), median(allP50Base));
-            System.out.printf("prefetch  median(p90)=%dns   no-prefetch median(p90)=%dns%n",
-                    median(allP90Pref), median(allP90Base));
-            System.out.printf("prefetch  median(p99)=%dns   no-prefetch median(p99)=%dns%n",
-                    median(allP99Pref), median(allP99Base));
             return;
         }
 
@@ -219,26 +233,54 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         }
     }
 
-    // ---------- SEARCH METHODS (now return Stats) ----------
+    // ---------- /proc majflt sampling ----------
+    // Reads /proc/self/stat and returns the cumulative major page faults (field 12: majflt).
+    private static long readSelfMajflt() {
+        // /proc/[pid]/stat: split after the last ')' to avoid spaces in comm
+        try (RandomAccessFile raf = new RandomAccessFile("/proc/self/stat", "r")) {
+            String line = raf.readLine();
+            if (line == null) return -1L;
+            int rp = line.lastIndexOf(')');
+            if (rp < 0 || rp + 2 > line.length()) return -1L; // require ") "
+            String tail = line.substring(rp + 2); // skip ") "
+            String[] f = tail.split("\\s+");
+            // In tail, fields start at original #3 (state). majflt is original #12.
+            // Mapping: original idx -> tail idx = idx - 3
+            // So majflt (12) -> tail[9]
+            if (f.length < 10) return -1L;
+            return Long.parseLong(f[9]);
+        } catch (Exception e) {
+            return -1L;
+        }
+    }
+
+    // ---------- SEARCH METHODS (return Stats) ----------
     // Overload accepting IndexReader to reuse across iterations without reopening
     private static Stats searchWithPrefetching(IndexReader reader) throws IOException {
         Stats stats = new Stats();
-        List<Long> latencies = stats.latencies;
         for (int i = 0; i < QUERIES_PER_ITER; ++i) {
             long[] countHolder = new long[1];
             int[] range = ranges.get(i);
             int minValue = range[0];
             int maxValue = range[1];
             PointValues.IntersectVisitor intersectVisitor = getIntersectVisitorWithPrefetching(minValue, maxValue, countHolder);
+
             for (LeafReaderContext lrc : reader.leaves()) {
                 PointValues pointValues = lrc.reader().getPointValues("pointField");
                 if (pointValues == null) continue;
                 PointValues.PointTree pointTree = pointValues.getPointTree();
-                long startTime = System.nanoTime();
+
+                long maj0 = readSelfMajflt();
+                long t0 = System.nanoTime();
+
                 intersectWithPrefetch(intersectVisitor, pointTree, countHolder);
                 pointTree.visitMatchingDocIDs(intersectVisitor);
-                long endTime = System.nanoTime();
-                latencies.add(endTime - startTime);
+
+                long t1 = System.nanoTime();
+                long maj1 = readSelfMajflt();
+
+                stats.addLatency(t1 - t0);
+                stats.addMajfltDelta((maj0 >= 0 && maj1 >= 0) ? (maj1 - maj0) : -1L);
             }
             stats.totalVisited += countHolder[0];
         }
@@ -247,134 +289,61 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
     private static Stats searchWithoutPrefetching(IndexReader reader) throws IOException {
         Stats stats = new Stats();
-        List<Long> latencies = stats.latencies;
         for (int i = 0; i < QUERIES_PER_ITER; ++i) {
             long[] countHolder = new long[1];
             int[] range = ranges.get(i);
             int minValue = range[0];
             int maxValue = range[1];
             PointValues.IntersectVisitor intersectVisitor = getIntersecVisitor(minValue, maxValue, countHolder);
+
             for (LeafReaderContext lrc : reader.leaves()) {
                 PointValues pointValues = lrc.reader().getPointValues("pointField");
                 if (pointValues == null) continue;
                 PointValues.PointTree pointTree = pointValues.getPointTree();
-                long startTime = System.nanoTime();
+
+                long maj0 = readSelfMajflt();
+                long t0 = System.nanoTime();
+
                 intersect(intersectVisitor, pointTree, countHolder);
-                long endTime = System.nanoTime();
-                latencies.add(endTime - startTime);
+
+                long t1 = System.nanoTime();
+                long maj1 = readSelfMajflt();
+
+                stats.addLatency(t1 - t0);
+                stats.addMajfltDelta((maj0 >= 0 && maj1 >= 0) ? (maj1 - maj0) : -1L);
             }
             stats.totalVisited += countHolder[0];
         }
         return stats;
     }
 
+    // Convenience wrappers that open/close reader (single-run)
+    private static Stats searchWithPrefetching(Directory dir) throws IOException {
+        try (IndexReader reader = DirectoryReader.open(dir)) {
+            return searchWithPrefetching(reader);
+        }
+    }
+    private static Stats searchWithoutPrefetching(Directory dir) throws IOException {
+        try (IndexReader reader = DirectoryReader.open(dir)) {
+            return searchWithoutPrefetching(reader);
+        }
+    }
 
     private static void reportIteration(Stats pre, Stats base) {
-        System.out.println("Visited (prefetch):   " + pre.totalVisited);
+        System.out.println("Visited (prefetch):    " + pre.totalVisited);
         System.out.println("Visited (no-prefetch): " + base.totalVisited);
         if (pre.totalVisited != base.totalVisited) {
             System.out.println("WARNING: Different doc visit counts; timings may not be strictly comparable.");
         }
-        System.out.printf("prefetch   p50=%dns p90=%dns p99=%dns%n", pre.p50(), pre.p90(), pre.p99());
-        System.out.printf("no-pref    p50=%dns p90=%dns p99=%dns%n", base.p50(), base.p90(), base.p99());
+        System.out.printf("prefetch   lat p50=%dns p90=%dns p99=%dns%n", pre.p50(), pre.p90(), pre.p99());
+        System.out.printf("no-pref    lat p50=%dns p90=%dns p99=%dns%n", base.p50(), base.p90(), base.p99());
+        System.out.printf("prefetch   majflt min=%d max=%d p50=%d p90=%d p99=%d%n",
+                pre.majMin(), pre.majMax(), pre.majP50(), pre.majP90(), pre.majP99());
+        System.out.printf("no-pref    majflt min=%d max=%d p50=%d p90=%d p99=%d%n",
+                base.majMin(), base.majMax(), base.majP50(), base.majP90(), base.majP99());
     }
 
-
-    private static void searchWithPrefetching(Directory dir) throws IOException {
-        List<Long> latencies = new ArrayList<>();
-//        List<Long> traversalsTimes   = new ArrayList<>();
-//        List<Long> visitTimes      = new ArrayList<>();
-        try (IndexReader reader = DirectoryReader.open(dir)) {
-            Random r = ThreadLocalRandom.current();
-
-            for (int i = 0; i < 1000; ++i) {
-                //long start = System.nanoTime();
-                long[] countHolder = new long[1];
-                int minValue = r.nextInt(1000);
-                int maxValue = 1000 + r.nextInt(100_000_000);
-                PointValues.IntersectVisitor intersectVisitor = getIntersectVisitorWithPrefetching(minValue, maxValue, countHolder);
-                for (LeafReaderContext lrc : reader.leaves()) {
-
-                    PointValues pointValues = lrc.reader().getPointValues("pointField");
-                    PointValues.PointTree pointTree = pointValues.getPointTree();
-                    long startTime = System.nanoTime();
-                    intersectWithPrefetch(intersectVisitor, pointTree, countHolder);
-//                    long traversalTime = System.nanoTime() - startTime;
-//                    long visitStartTime = System.nanoTime();
-                    pointTree.visitMatchingDocIDs(intersectVisitor);
-//                    long visitTime = System.nanoTime() - visitStartTime;
-                    long endTime = System.nanoTime();
-                    latencies.add(endTime - startTime);
-//                    traversalsTimes.add(traversalTime);
-//                    visitTimes.add(visitTime);
-                }
-            }
-        }
-
-        latencies.sort(null);
-//        visitTimes.sort(null);
-//        traversalsTimes.sort(null);
-
-        long p50nanos = latencies.get(latencies.size() / 2);
-        long p90nanos = latencies.get(latencies.size() * 9 / 10);
-        long p99nanos = latencies.get(latencies.size() * 99 / 100);
-
-//        long p50TreeTraversalnanos = traversalsTimes.get(traversalsTimes.size() / 2);
-//        long p90TreeTraversalnanos = traversalsTimes.get(traversalsTimes.size() * 9 / 10);
-//        long p99TreeTraversalnanos = traversalsTimes.get(traversalsTimes.size() * 99 / 100);
-//
-//        long p50Visitnanos = visitTimes.get(visitTimes.size() / 2);
-//        long p90Visitnanos = visitTimes.get(visitTimes.size() * 9 / 10);
-//        long p99Visitnanos = visitTimes.get(visitTimes.size() * 99 / 100);
-
-        System.out.println("p50 :" + p50nanos + " nanos " );
-        System.out.println("p90 : " + p90nanos + " nanos ");
-        System.out.println("p99 : " + p99nanos + " nanos ");
-//        System.out.println("p50Tree traversal : " + p50TreeTraversalnanos + " nanos ");
-//        System.out.println("p90Tree traversal : " + p90TreeTraversalnanos + " nanos ");
-//        System.out.println("p99Tree traversal : " + p99TreeTraversalnanos + " nanos ");
-//        System.out.println("p50Visit : " + p50Visitnanos + " nanos ");
-//        System.out.println("p90Visit : " + p90Visitnanos + " nanos ");
-//        System.out.println("p99Visit : " + p99Visitnanos + " nanos ");
-    }
-
-    private static void searchWithoutPrefetching(Directory dir) throws IOException {
-        List<Long> latencies = new ArrayList<>();
-        try (IndexReader reader = DirectoryReader.open(dir)) {
-            Random r = ThreadLocalRandom.current();
-            for (int i = 0; i < 1000; ++i) {
-                long[] countHolder = new long[1];
-                int minValue = r.nextInt(1000);
-                int maxValue = 1000 + r.nextInt(100_000_000);
-
-                PointValues.IntersectVisitor intersectVisitor = getIntersecVisitor(minValue, maxValue, countHolder);
-                for (LeafReaderContext lrc : reader.leaves()) {
-                    PointValues pointValues = lrc.reader().getPointValues("pointField");
-                    PointValues.PointTree pointTree = pointValues.getPointTree();
-                   // pointValues.intersect(intersectVisitor);
-                    long startTime = System.nanoTime();
-                    intersect(intersectVisitor, pointTree, countHolder);
-                    long endTime = System.nanoTime();
-                    latencies.add(endTime - startTime);
-                }
-            }
-        }
-        latencies.sort(null);
-
-        long p50nanos = latencies.get(latencies.size() / 2);
-        long p90nanos = latencies.get(latencies.size() * 9 / 10);
-        long p99nanos = latencies.get(latencies.size() * 99 / 100);
-
-        long p50ms = NANOSECONDS.toMillis(p50nanos);
-        long p90ms = NANOSECONDS.toMillis(p90nanos);
-        long p99ms = NANOSECONDS.toMillis(p99nanos);
-
-        System.out.println("P50: " +p50ms+ " ms " + ", p50 :" + p50nanos + " nanos " );
-        System.out.println("P90: " + p90ms+ " ms , p90 : " + p90nanos + " nanos ");
-        System.out.println("P99: " + p99ms+ " ms , p99 : " + p99nanos + " nanos ");
-    }
-
-
+    // ---------- DO NOT CHANGE BELOW: your visitors & intersect functions ----------
     private static PointValues.IntersectVisitor getIntersectVisitorWithPrefetching(int minValue, int maxValue,
                                                                                    long[] countHolder) {
 
@@ -412,19 +381,14 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
             @Override
             public Set<Long> matchingLeafNodesfpDocIds() {
-
-
-               // System.out.println("list size : " + list.size() + " set size : " + matchingLeafBlocksFPsDocIds.size());
-               return matchingLeafBlocksFPsDocIds;
+                return matchingLeafBlocksFPsDocIds;
             }
 
             @Override
             public void matchedLeafFpDocIds(long fp, int count) {
-               matchingLeafBlocksFPsDocIds.add(fp);
+                matchingLeafBlocksFPsDocIds.add(fp);
                 countHolder[0] += count;
             };
-
-
 
             @Override
             public PointValues.Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
@@ -439,7 +403,6 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             }
         };
     }
-
 
     private static PointValues.IntersectVisitor getIntersecVisitor(int minValue, int maxValue, long[] countHolder) {
         return new PointValues.IntersectVisitor() {
