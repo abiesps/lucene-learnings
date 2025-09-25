@@ -10,7 +10,6 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.PointValues;
-import org.apache.lucene.index.TieredMergePolicy;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
@@ -118,7 +117,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     long startTime = System.nanoTime();
                     PointValues pointValues = lrc.reader().getPointValues("pointField");
                     PointValues.PointTree pointTree = pointValues.getPointTree();
-                    pointValues.intersect(intersectVisitor);
+                    intersect(intersectVisitor, pointTree, countHolder);
                     pointTree.visitMatchingDocIDs(intersectVisitor);
                     long endTime = System.nanoTime();
                     latencies.add(endTime - startTime);
@@ -136,7 +135,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         try (IndexReader reader = DirectoryReader.open(dir)) {
             IndexSearcher searcher = new IndexSearcher(reader);
             Random r = ThreadLocalRandom.current();
-            for (int i = 0; i < 10_000; ++i) {
+            for (int i = 0; i < 10; ++i) {
                 long start = System.nanoTime();
                 long[] countHolder = new long[1];
                 int minValue = r.nextInt(1000);
@@ -145,7 +144,9 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                 PointValues.IntersectVisitor intersectVisitor = getIntersecVisitor(minValue, maxValue, countHolder);
                 for (LeafReaderContext lrc : reader.leaves()) {
                     long startTime = System.nanoTime();
-                    lrc.reader().getPointValues("pointField").intersect(intersectVisitor);
+                    PointValues pointValues = lrc.reader().getPointValues("pointField");
+                    PointValues.PointTree pointTree = pointValues.getPointTree();
+                    intersect(intersectVisitor, pointTree, countHolder);
                     long endTime = System.nanoTime();
                     latencies.add(endTime - startTime);
                 }
@@ -156,130 +157,6 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         System.out.println("P90: " + latencies.get(latencies.size() * 9 / 10));
         System.out.println("P99: " + latencies.get(latencies.size() * 99 / 100));
     }
-
-
-    //return new PointValues.IntersectVisitor() {
-    //
-    //            DocIdSetBuilder.BulkAdder adder;
-    //            Set<Long> matchingLeafBlocksFPsDocIds = new LinkedHashSet<>();
-    //            Set<Long> matchingLeafBlocksFPsDocValues = new LinkedHashSet<>();
-    //            TreeMap<Integer, Long> leafOrdinalFPDocIds = new TreeMap<>();
-    //            TreeMap<Integer, Long> leafOrdinalFPDocValues = new TreeMap<>();
-    //            int lastMatchingLeafOrdinal = -1;
-    //
-    //            boolean firstMatchFound = false;
-    //            long firstMatchedFp = -1;
-    //
-    //            @Override
-    //            public void grow(int count) {
-    //                adder = result.grow(count);
-    //            }
-    //
-    //            @Override
-    //            public void visit(int docID) {
-    //                // it is possible that size < 1024 and docCount < size but we will continue to count through all the 1024 docs
-    //                adder.add(docID);
-    //                docCount[0]++;
-    //            }
-    //
-    //            @Override
-    //            public void visit(DocIdSetIterator iterator) throws IOException {
-    //                adder.add(iterator);
-    //            }
-    //
-    //            @Override
-    //            public void visit(IntsRef ref) {
-    //                adder.add(ref);
-    //                docCount[0] += ref.length;
-    //            }
-    //
-    //            @Override
-    //            public void visit(int docID, byte[] packedValue) {
-    //                if (matches(packedValue)) {
-    //                    visit(docID);
-    //                }
-    //            }
-    //
-    //            @Override
-    //            public void visit(DocIdSetIterator iterator, byte[] packedValue) throws IOException {
-    //                if (matches(packedValue)) {
-    //                    adder.add(iterator);
-    //                }
-    //            }
-    //
-    //            @Override
-    //            public PointValues.Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
-    //                return relate(minPackedValue, maxPackedValue);
-    //            }
-    //
-    //            @Override
-    //            public void matchedLeafFpDocIds(long fp, int count) {
-    //                matchingLeafBlocksFPsDocIds.add(fp);
-    //                docCount[0] += count;
-    //            };
-    //
-    //            @Override
-    //            public  Set<Long> matchingLeafNodesfpDocIds() {
-    //                return matchingLeafBlocksFPsDocIds;
-    //            }
-    //
-    //            @Override
-    //            public void matchedLeafFpDocValues(long fp) {
-    //                matchingLeafBlocksFPsDocValues.add(fp);
-    //            };
-    //
-    //            @Override
-    //            public  Set<Long> matchingLeafNodesfpDocValues() {
-    //                return matchingLeafBlocksFPsDocValues;
-    //            }
-    //
-    //            @Override
-    //            public void matchedLeafOrdinalDocIds(int leafOrdinal, long fp, int count) {
-    //                leafOrdinalFPDocIds.put(leafOrdinal, fp);
-    //            };
-    //
-    //            @Override
-    //            public void matchedLeafOrdinalDocValues(int leafOrdinal, long fp) {
-    //                leafOrdinalFPDocValues.put(leafOrdinal, fp);
-    //            };
-    //
-    //            @Override
-    //            public Map<Integer,Long> matchingLeafNodesDocValues() {
-    //                return leafOrdinalFPDocValues;
-    //            }
-    //
-    //            @Override
-    //            public Map<Integer,Long> matchingLeafNodesDocIds() {
-    //                return leafOrdinalFPDocIds;
-    //            }
-    //
-    //            @Override
-    //            public int lastMatchingLeafOrdinal() {
-    //                return lastMatchingLeafOrdinal;
-    //            }
-    //
-    //            @Override
-    //            public  void setLastMatchingLeafOrdinal(int leafOrdinal) {
-    //                lastMatchingLeafOrdinal = leafOrdinal;
-    //            }
-    //
-    //            @Override
-    //            public void visitAfterPrefetch(int docID) throws IOException {
-    //                //in.visitAfterPrefetch(docID);
-    //                adder.add(docID);
-    //            }
-    //
-    //            @Override
-    //            public void visitAfterPrefetch(int docID, byte[] packedValue) throws IOException {
-    //                //in.visitAfterPrefetch(docID, packedValue);
-    //                if (matches(packedValue)) {
-    //                    //visit(docID);
-    //                    adder.add(docID);
-    //                }
-    //            };
-    //
-    //
-    //        };
 
 
     private static PointValues.IntersectVisitor getIntersectVisitorWithPrefetching(int minValue, int maxValue,
@@ -369,5 +246,37 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                 return PointValues.Relation.CELL_CROSSES_QUERY;
             }
         };
+    }
+
+    public static final void intersect(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
+        intersectUpto(visitor, pointTree, countHolder);
+        assert pointTree.moveToParent() == false;
+    }
+
+    private static void intersectUpto(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
+        while (countHolder[0] < 10_000) {
+            PointValues.Relation compare =
+                    visitor.compare(pointTree.getMinPackedValue(), pointTree.getMaxPackedValue());
+            if (compare == PointValues.Relation.CELL_INSIDE_QUERY) {
+                // This cell is fully inside the query shape: recursively add all points in this cell
+                // without filtering
+                pointTree.visitDocIDs(visitor);
+            } else if (compare == PointValues.Relation.CELL_CROSSES_QUERY) {
+                // The cell crosses the shape boundary, or the cell fully contains the query, so we fall
+                // through and do full filtering:
+                if (pointTree.moveToChild()) {
+                    continue;
+                }
+                // TODO: we can assert that the first value here in fact matches what the pointTree
+                // claimed?
+                // Leaf node; scan and filter all points in this block:
+                pointTree.visitDocValues(visitor);
+            }
+            while (pointTree.moveToSibling() == false) {
+                if (pointTree.moveToParent() == false) {
+                    return;
+                }
+            }
+        }
     }
 }
