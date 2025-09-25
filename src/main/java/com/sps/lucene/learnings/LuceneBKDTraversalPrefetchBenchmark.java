@@ -29,6 +29,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
+
 public class LuceneBKDTraversalPrefetchBenchmark {
 
     public static void main(String[] args) throws Exception {
@@ -105,7 +107,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         try (IndexReader reader = DirectoryReader.open(dir)) {
             IndexSearcher searcher = new IndexSearcher(reader);
             Random r = ThreadLocalRandom.current();
-            for (int i = 0; i < 10; ++i) {
+            for (int i = 0; i < 10_000; ++i) {
                 //long start = System.nanoTime();
                 long[] countHolder = new long[1];
                 int minValue = r.nextInt(1000);
@@ -117,6 +119,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     long startTime = System.nanoTime();
                     PointValues pointValues = lrc.reader().getPointValues("pointField");
                     PointValues.PointTree pointTree = pointValues.getPointTree();
+                   // pointValues.intersect(intersectVisitor);
                     intersect(intersectVisitor, pointTree, countHolder);
                     pointTree.visitMatchingDocIDs(intersectVisitor);
                     long endTime = System.nanoTime();
@@ -125,9 +128,16 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             }
         }
         latencies.sort(null);
-        System.out.println("P50: " + latencies.get(latencies.size() / 2));
-        System.out.println("P90: " + latencies.get(latencies.size() * 9 / 10));
-        System.out.println("P99: " + latencies.get(latencies.size() * 99 / 100));
+        long p50nanos = latencies.get(latencies.size() / 2);
+        long p90nanos = latencies.get(latencies.size() * 9 / 10);
+        long p99nanos = latencies.get(latencies.size() * 99 / 100);
+
+        long p50ms = NANOSECONDS.toMillis(p50nanos);
+        long p90ms = NANOSECONDS.toMillis(p90nanos);
+        long p99ms = NANOSECONDS.toMillis(p99nanos);
+        System.out.println("P50: " +p50ms+ " ms " + ", p50 :" + p50nanos + " nanos " );
+        System.out.println("P90: " + p90ms+ " ms , p90 : " + p90nanos + " nanos ");
+        System.out.println("P99: " + p99ms+ " ms , p99 : " + p99nanos + " nanos ");
     }
 
     private static void searchWithoutPrefetching(Directory dir) throws IOException {
@@ -135,7 +145,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         try (IndexReader reader = DirectoryReader.open(dir)) {
             IndexSearcher searcher = new IndexSearcher(reader);
             Random r = ThreadLocalRandom.current();
-            for (int i = 0; i < 10; ++i) {
+            for (int i = 0; i < 10_000; ++i) {
                 long start = System.nanoTime();
                 long[] countHolder = new long[1];
                 int minValue = r.nextInt(1000);
@@ -146,6 +156,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     long startTime = System.nanoTime();
                     PointValues pointValues = lrc.reader().getPointValues("pointField");
                     PointValues.PointTree pointTree = pointValues.getPointTree();
+                   // pointValues.intersect(intersectVisitor);
                     intersect(intersectVisitor, pointTree, countHolder);
                     long endTime = System.nanoTime();
                     latencies.add(endTime - startTime);
@@ -153,9 +164,16 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             }
         }
         latencies.sort(null);
-        System.out.println("P50: " + latencies.get(latencies.size() / 2));
-        System.out.println("P90: " + latencies.get(latencies.size() * 9 / 10));
-        System.out.println("P99: " + latencies.get(latencies.size() * 99 / 100));
+        long p50nanos = latencies.get(latencies.size() / 2);
+        long p90nanos = latencies.get(latencies.size() * 9 / 10);
+        long p99nanos = latencies.get(latencies.size() * 99 / 100);
+
+        long p50ms = NANOSECONDS.toMillis(p50nanos);
+        long p90ms = NANOSECONDS.toMillis(p90nanos);
+        long p99ms = NANOSECONDS.toMillis(p99nanos);
+        System.out.println("P50: " +p50ms+ " ms " + ", p50 :" + p50nanos + " nanos " );
+        System.out.println("P90: " + p90ms+ " ms , p90 : " + p90nanos + " nanos ");
+        System.out.println("P99: " + p99ms+ " ms , p99 : " + p99nanos + " nanos ");
     }
 
 
