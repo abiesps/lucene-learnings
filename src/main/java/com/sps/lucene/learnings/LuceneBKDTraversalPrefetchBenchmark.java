@@ -105,7 +105,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                 //long start = System.nanoTime();
                 long[] countHolder = new long[1];
                 int minValue = r.nextInt(1000);
-                int maxValue = r.nextInt(100_000_000);
+                int maxValue = 1000 + r.nextInt(100_000_000);
                 PointValues.IntersectVisitor intersectVisitor = getIntersectVisitorWithPrefetching(minValue, maxValue, countHolder);
                 for (LeafReaderContext lrc : reader.leaves()) {
                     long startTime = System.nanoTime();
@@ -140,7 +140,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                 long start = System.nanoTime();
                 long[] countHolder = new long[1];
                 int minValue = r.nextInt(1000);
-                int maxValue = r.nextInt(100_000);
+                int maxValue = 1000 + r.nextInt(100_000_000);
 
                 PointValues.IntersectVisitor intersectVisitor = getIntersecVisitor(minValue, maxValue, countHolder);
                 for (LeafReaderContext lrc : reader.leaves()) {
