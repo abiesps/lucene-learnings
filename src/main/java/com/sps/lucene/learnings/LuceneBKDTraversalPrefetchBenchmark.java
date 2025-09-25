@@ -50,25 +50,22 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         Directory dir = FSDirectory.open(dirPath);
 
         if (ingest) {
-            //if (DirectoryReader.indexExists(dir) == false) {
-                TieredMergePolicy mp = new TieredMergePolicy();
-                mp.setSegmentsPerTier(100);
-                mp.setMaxMergeAtOnce(100);
-                mp.setMaxMergedSegmentMB(1024);
-                try (IndexWriter w = new IndexWriter(dir, new IndexWriterConfig()
-                        .setMergePolicy(mp)
-                        .setRAMBufferSizeMB(1024)
-                        .setOpenMode(IndexWriterConfig.OpenMode.APPEND))
-
-                ) {
+            if (DirectoryReader.indexExists(dir) == false) {
+//                TieredMergePolicy mp = new TieredMergePolicy();
+//                mp.setSegmentsPerTier(100);
+//                mp.setMaxMergeAtOnce(100);
+//                mp.setMaxMergedSegmentMB(1024);
+            IndexWriterConfig indexWriterConfig = new IndexWriterConfig().setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND)
+                    .setRAMBufferSizeMB(10240);
+                try (IndexWriter w = new IndexWriter(dir, indexWriterConfig)) {
                     ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
                     AtomicLong indexed = new AtomicLong(0);
                     for (int task = 0; task < 1000; ++task) {
                         executor.execute(() -> {
                             Random r = ThreadLocalRandom.current();
-                            for (int i = 0; i < 10_000; ++i) {
+                            for (int i = 0; i < 1000; ++i) {
                                 Document doc = new Document();
-                                for (int j = 0; j < 10000; ++j) {
+                                for (int j = 0; j < 10_000; ++j) {
                                     doc.add(new IntField("pointField", r.nextInt(100_000_000), Field.Store.NO));
                                 }
                                 try {
@@ -93,7 +90,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     System.out.println("Done force merging");
                     w.commit();
                 }
-           // }
+            }
 
         }
         if (testWithPrefetch) {
