@@ -36,7 +36,7 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 public class LuceneBKDTraversalPrefetchBenchmark {
 
     static Random base = new Random(42);
-    static final int MEASURE_ITERS_DEFAULT = 3;   // default number of A/B iterations
+    static final int MEASURE_ITERS_DEFAULT = 10;   // default number of A/B iterations
     static final int QUERIES_PER_ITER = 1000;     // per your current loops
     static List<int[]> ranges = new ArrayList<>(QUERIES_PER_ITER);
     static {
