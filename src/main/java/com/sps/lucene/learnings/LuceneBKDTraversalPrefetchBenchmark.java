@@ -36,8 +36,8 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 public class LuceneBKDTraversalPrefetchBenchmark {
 
     static Random base = new Random(42);
-    static final int MEASURE_ITERS_DEFAULT = 10;   // default number of A/B iterations
-    static final int QUERIES_PER_ITER = 100;     // per your current loops
+    static final int MEASURE_ITERS_DEFAULT = 3;   // default number of A/B iterations
+    static final int QUERIES_PER_ITER = 1000;     // per your current loops
     static List<int[]> ranges = new ArrayList<>(QUERIES_PER_ITER);
     static {
         for (int i = 0; i < QUERIES_PER_ITER; i++) {
@@ -414,6 +414,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
             for (LeafReaderContext lrc : reader.leaves()) {
                 PointValues pointValues = lrc.reader().getPointValues("pointField");
+
                 if (pointValues == null) continue;
                 PointValues.PointTree pointTree = pointValues.getPointTree();
 
@@ -450,9 +451,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
                 long maj0 = readSelfMajflt();
                 long t0 = System.nanoTime();
-
                 intersect(intersectVisitor, pointTree, countHolder);
-
                 long t1 = System.nanoTime();
                 long maj1 = readSelfMajflt();
 
@@ -493,7 +492,6 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     // ---------- DO NOT CHANGE BELOW: your visitors & intersect functions ----------
     private static PointValues.IntersectVisitor getIntersectVisitorWithPrefetching(int minValue, int maxValue,
                                                                                    long[] countHolder) {
-
         return new PointValues.IntersectVisitor() {
             // This version of `visit` gets called when we know that every doc in the current leaf node matches.
             int lastMatchingLeafOrdinal = -1;
@@ -593,6 +591,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     }
 
     private static void intersectUpto(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
+
         while (countHolder[0] <= 10_000) {
             PointValues.Relation compare =
                     visitor.compare(pointTree.getMinPackedValue(), pointTree.getMaxPackedValue());
