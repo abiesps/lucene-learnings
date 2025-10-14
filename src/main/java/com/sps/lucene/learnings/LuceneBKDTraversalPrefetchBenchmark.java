@@ -37,7 +37,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
     static Random base = new Random(42);
     static final int MEASURE_ITERS_DEFAULT = 10;   // default number of A/B iterations
-    static final int QUERIES_PER_ITER = 1000;     // per your current loops
+    static final int QUERIES_PER_ITER = 10000;     // per your current loops
     static List<int[]> ranges = new ArrayList<>(QUERIES_PER_ITER);
     static {
         for (int i = 0; i < QUERIES_PER_ITER; i++) {
@@ -162,17 +162,9 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
         // Single-mode quick path
         if ("prefetch".equalsIgnoreCase(mode) || "no_prefetch".equalsIgnoreCase(mode)) {
-            vmtouchEvictAll(DATA);     // proactive eviction per-file
-            vmtouchReport(DATA);
-            dropPageCache();
-            runSync();
-            runClearScript();
-            runSync();
+            clean(DATA);
             Stats s = "prefetch".equalsIgnoreCase(mode) ? searchWithPrefetching(dir) : searchWithoutPrefetching(dir);
-            dropPageCache();
-            runSync();
-            runClearScript();
-            runSync();
+            clean(DATA);
 
             s.sort();
             System.out.println("Visited: " + s.totalVisited);
@@ -495,7 +487,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         return new PointValues.IntersectVisitor() {
             // This version of `visit` gets called when we know that every doc in the current leaf node matches.
             int lastMatchingLeafOrdinal = -1;
-            Set<Long> matchingLeafBlocksFPsDocIds = new LinkedHashSet<>();
+            ArrayList<Long> matchingLeafBlocksFPsDocIds = new ArrayList<>();
 
             @Override
             public void visit(int docID) throws IOException {
@@ -525,7 +517,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             }
 
             @Override
-            public Set<Long> matchingLeafNodesfpDocIds() {
+            public List<Long> matchingLeafNodesfpDocIds() {
                 return matchingLeafBlocksFPsDocIds;
             }
 
