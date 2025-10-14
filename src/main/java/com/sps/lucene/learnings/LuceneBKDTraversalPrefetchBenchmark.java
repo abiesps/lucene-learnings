@@ -88,6 +88,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
 
     private static void clean(String DATA) {
+        if (HOT_PATH == true) return; 
         vmtouchEvictAll(DATA);     // proactive eviction per-file
         vmtouchReport(DATA);
         dropPageCache();
@@ -99,6 +100,8 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         runClearScript();
         runSync();
     }
+    
+    static boolean HOT_PATH = false;
     public static void main(String[] args) throws Exception {
 
         String tempData = "temp_data";
@@ -106,7 +109,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
         String mode = (args.length >= 2) ? args[1] : "both"; // prefetch | no_prefetch | ingest | both
         boolean ingest = "ingest".equalsIgnoreCase(mode);
-
+        HOT_PATH = args.length >= 3 && Boolean.parseBoolean(args[2]);
         int iterations = MEASURE_ITERS_DEFAULT;
 
         // parse optional flags
@@ -165,7 +168,6 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             clean(DATA);
             Stats s = "prefetch".equalsIgnoreCase(mode) ? searchWithPrefetching(dir) : searchWithoutPrefetching(dir);
             clean(DATA);
-
             s.sort();
             System.out.println("Visited: " + s.totalVisited);
             System.out.printf("lat   p50=%dns p90=%dns p99=%dns%n", s.p50(), s.p90(), s.p99());
@@ -194,11 +196,11 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                     try (IndexReader reader = DirectoryReader.open(dir)) {
                         clean(DATA);
                         base = searchWithoutPrefetching(reader);
-                        clean(DATA);
+                       clean(DATA);
                     }
                     pre.sort(); base.sort();
                     reportIteration(pre, base);
-                    clean(DATA);
+                   clean(DATA);
                 } else {
                     clean(DATA);
                     Stats pre = null;
