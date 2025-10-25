@@ -216,54 +216,6 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         }
 
         // Comparison mode: multiple iterations, each iteration runs BOTH modes with cache clears
-        if ("both".equalsIgnoreCase(mode)) {
-            for (int iter = 0; iter < iterations; iter++) {
-                System.out.println("\n=== Iteration " + (iter + 1) + " / " + iterations + " ===");
-
-                // Alternate order each iteration to avoid order bias
-                boolean prefetchFirst = (iter % 2 == 0);
-                if (prefetchFirst) {
-                    clean(DATA);
-                    Stats pre = null;
-                    Stats base = null;
-                    try (IndexReader reader = DirectoryReader.open(dir)) {
-                        clean(DATA);
-                        pre = search(reader);
-                        clean(DATA);
-                    }
-                    clean(DATA);
-                    try (IndexReader reader = DirectoryReader.open(dir)) {
-                        clean(DATA);
-                        base = search(reader);
-                        clean(DATA);
-                    }
-                    pre.sort();
-                    base.sort();
-                    reportIteration(pre, base);
-                    clean(DATA);
-                } else {
-                    clean(DATA);
-                    Stats pre = null;
-                    Stats base = null;
-                    try (IndexReader reader = DirectoryReader.open(dir)) {
-                        clean(DATA);
-                        base = search(reader);
-                        clean(DATA);
-                    }
-                    clean(DATA);
-                    try (IndexReader reader = DirectoryReader.open(dir)) {
-                        clean(DATA);
-                        pre = search(reader);
-                        clean(DATA);
-                    }
-                    pre.sort();
-                    base.sort();
-                    reportIteration(pre, base);
-                    clean(DATA);
-                }
-            }
-            return;
-        }
 
         System.err.println("Unknown mode: " + mode + " (use prefetch | no_prefetch | both | ingest)");
     }
@@ -450,13 +402,11 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             long[] countHolder = new long[1];
             int[] range = ranges.get(i);
             Query pointQuery = IntPoint.newRangeQuery("pointField", range[0], range[1]);
-
             long maj0 = readSelfMajflt();
             long t0 = System.nanoTime();
             searcher.search(pointQuery, thc);
             long t1 = System.nanoTime();
             long maj1 = readSelfMajflt();
-
             stats.addLatency(t1 - t0);
             stats.addMajfltDelta((maj0 >= 0 && maj1 >= 0) ? (maj1 - maj0) : -1L);
             stats.totalVisited += thc.getTotalHits();
