@@ -1,28 +1,21 @@
 package com.sps.lucene.learnings;
-
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.IntField;
 import org.apache.lucene.document.IntPoint;
+import org.apache.lucene.index.*;
 import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.IndexReader;import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.PointValues;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
-
 import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.IOException;import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
-import java.io.UncheckedIOException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
+import java.io.UncheckedIOException;import java.nio.file.Path;
+import java.nio.file.Paths;import java.util.ArrayList;
+import java.util.LinkedHashSet;import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -346,8 +339,8 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
             //String line = null;
             while (r.readLine() != null) {
-              //  System.out.println(r.);/* swallow output */
-                }
+                //  System.out.println(r.);/* swallow output */
+            }
         }
         return p.waitFor();
     }
@@ -406,27 +399,20 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     private static Stats searchWithPrefetching(IndexReader reader) throws IOException {
         Stats stats = new Stats();
         for (int i = 0; i < QUERIES_PER_ITER; ++i) {
-            long[] countHolder = new long[1];
+            int[] countHolder = new int[1];
             int[] range = ranges.get(i);
             int minValue = range[0];
             int maxValue = range[1];
-            PointValues.IntersectVisitor intersectVisitor = getIntersectVisitorWithPrefetching(minValue, maxValue, countHolder);
+            PointValues.PrefetchCapableVisitor prefetchCapableVisitor = getPrefetchCapableIntersectVisitor(minValue, maxValue, countHolder);
 
             for (LeafReaderContext lrc : reader.leaves()) {
                 PointValues pointValues = lrc.reader().getPointValues("pointField");
-
                 if (pointValues == null) continue;
-                PointValues.PointTree pointTree = pointValues.getPointTree();
-
                 long maj0 = readSelfMajflt();
                 long t0 = System.nanoTime();
-
-                intersectWithPrefetch(intersectVisitor, pointTree, countHolder);
-                pointTree.visitMatchingDocIDs(intersectVisitor);
-
+                pointValues.intersectWithPrefetch(prefetchCapableVisitor);
                 long t1 = System.nanoTime();
                 long maj1 = readSelfMajflt();
-
                 stats.addLatency(t1 - t0);
                 stats.addMajfltDelta((maj0 >= 0 && maj1 >= 0) ? (maj1 - maj0) : -1L);
             }
@@ -438,7 +424,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
     private static Stats searchWithoutPrefetching(IndexReader reader) throws IOException {
         Stats stats = new Stats();
         for (int i = 0; i < QUERIES_PER_ITER; ++i) {
-            long[] countHolder = new long[1];
+            int[] countHolder = new int[1];
             int[] range = ranges.get(i);
             int minValue = range[0];
             int maxValue = range[1];
@@ -446,15 +432,13 @@ public class LuceneBKDTraversalPrefetchBenchmark {
 
             for (LeafReaderContext lrc : reader.leaves()) {
                 PointValues pointValues = lrc.reader().getPointValues("pointField");
-                if (pointValues == null) continue;
-                PointValues.PointTree pointTree = pointValues.getPointTree();
 
                 long maj0 = readSelfMajflt();
                 long t0 = System.nanoTime();
-                intersect(intersectVisitor, pointTree, countHolder);
+                if (pointValues == null) continue;
+                pointValues.intersect(intersectVisitor);
                 long t1 = System.nanoTime();
                 long maj1 = readSelfMajflt();
-
                 stats.addLatency(t1 - t0);
                 stats.addMajfltDelta((maj0 >= 0 && maj1 >= 0) ? (maj1 - maj0) : -1L);
             }
@@ -489,52 +473,46 @@ public class LuceneBKDTraversalPrefetchBenchmark {
                 base.majMin(), base.majMax(), base.majP50(), base.majP90(), base.majP99());
     }
 
-    // ---------- DO NOT CHANGE BELOW: your visitors & intersect functions ----------
-    private static PointValues.IntersectVisitor getIntersectVisitorWithPrefetching(int minValue, int maxValue,
-                                                                                   long[] countHolder) {
-        return new PointValues.IntersectVisitor() {
-            // This version of `visit` gets called when we know that every doc in the current leaf node matches.
-            int lastMatchingLeafOrdinal = -1;
-            Set<Long> matchingLeafBlocksFPsDocIds = new LinkedHashSet<>();
+    private static  PointValues.PrefetchCapableVisitor getPrefetchCapableIntersectVisitor(
+            int minValue, int maxValue,
+            int[] count) {
+        return new PointValues.PrefetchCapableVisitor() {
+
+            List<Long> matchedBlocks = new ArrayList();
+            int lastMatchedOrdinal = -1;
 
             @Override
-            public void visit(int docID) throws IOException {
-                countHolder[0]++;
+            public int lastMatchedBlock() {
+                return lastMatchedOrdinal;
             }
 
             @Override
-            public void visitAfterPrefetch(int docID) throws IOException {
-                //countHolder[0]++;
+            public void setLastMatchedBlock(int leafNodeOrdinal) {
+                lastMatchedOrdinal = leafNodeOrdinal;
             }
-            // This version of `visit` is called when the current leaf node partially matches the range.
+
             @Override
-            public void visit(int docID, byte[] packedValue) throws IOException {
+            public void savePrefetchedBlockForLaterVisit(long leafFp) {
+                matchedBlocks.add(leafFp);
+            }
+
+            @Override
+            public List<Long> savedPrefetchedBlocks() {
+                return matchedBlocks;
+            }
+
+            @Override
+            public void visit(int docID) {
+                count[0]++;
+            }
+
+            @Override
+            public void visit(int docID, byte[] packedValue) {
                 int val = IntPoint.decodeDimension(packedValue, 0);
                 if (val >= minValue && val < maxValue) {
                     visit(docID);//counter increment automatically
                 }
             }
-
-            @Override
-            public void setLastMatchingLeafOrdinal(int leafOrdinal) {
-                lastMatchingLeafOrdinal = leafOrdinal;
-            }
-
-            public int lastMatchingLeafOrdinal() {
-                return lastMatchingLeafOrdinal;
-            }
-
-            @Override
-            public Set<Long> matchingLeafNodesfpDocIds() {
-                return matchingLeafBlocksFPsDocIds;
-            }
-
-            @Override
-            public void matchedLeafFpDocIds(long fp, int count) {
-                matchingLeafBlocksFPsDocIds.add(fp);
-                countHolder[0] += count;
-            };
-
             @Override
             public PointValues.Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
                 int minValInPT = IntPoint.decodeDimension(minPackedValue, 0);
@@ -549,12 +527,13 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         };
     }
 
-    private static PointValues.IntersectVisitor getIntersecVisitor(int minValue, int maxValue, long[] countHolder) {
+
+    private static PointValues.IntersectVisitor getIntersecVisitor(int minValue, int maxValue, int[] count) {
         return new PointValues.IntersectVisitor() {
             // This version of `visit` gets called when we know that every doc in the current leaf node matches.
             @Override
             public void visit(int docID) throws IOException {
-                countHolder[0]++;
+                count[0]++;
             }
 
             // This version of `visit` is called when the current leaf node partially matches the range.
@@ -562,7 +541,7 @@ public class LuceneBKDTraversalPrefetchBenchmark {
             public void visit(int docID, byte[] packedValue) throws IOException {
                 int val = IntPoint.decodeDimension(packedValue, 0);
                 if (val >= minValue && val < maxValue) {
-                    countHolder[0]++;
+                    count[0]++;
                 }
             }
 
@@ -580,17 +559,18 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         };
     }
 
-    public static final void intersectWithPrefetch(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
+    public static final void intersectWithPrefetch(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, int[] countHolder) throws IOException {
         intersectUptoWithPrefetch(visitor, pointTree, countHolder);
+
         assert pointTree.moveToParent() == false;
     }
 
-    public static final void intersect(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
+    public static final void intersect(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, int[] countHolder) throws IOException {
         intersectUpto(visitor, pointTree, countHolder);
         assert pointTree.moveToParent() == false;
     }
 
-    private static void intersectUpto(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
+    private static void intersectUpto(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, int[] countHolder) throws IOException {
 
         while (countHolder[0] <= 10_000) {
             PointValues.Relation compare =
@@ -618,30 +598,31 @@ public class LuceneBKDTraversalPrefetchBenchmark {
         }
     }
 
-    private static void intersectUptoWithPrefetch(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, long[] countHolder) throws IOException {
-        while (countHolder[0] <= 10_000) {
-            PointValues.Relation compare =
-                    visitor.compare(pointTree.getMinPackedValue(), pointTree.getMaxPackedValue());
-            if (compare == PointValues.Relation.CELL_INSIDE_QUERY) {
-                // This cell is fully inside the query shape: recursively add all points in this cell
-                // without filtering
-                pointTree.prefetchDocIDs(visitor);
-            } else if (compare == PointValues.Relation.CELL_CROSSES_QUERY) {
-                // The cell crosses the shape boundary, or the cell fully contains the query, so we fall
-                // through and do full filtering:
-                if (pointTree.moveToChild()) {
-                    continue;
-                }
-                // TODO: we can assert that the first value here in fact matches what the pointTree
-                // claimed?
-                // Leaf node; scan and filter all points in this block:
-                pointTree.visitDocValues(visitor);
-            }
-            while (pointTree.moveToSibling() == false) {
-                if (pointTree.moveToParent() == false) {
-                    return;
-                }
-            }
-        }
+
+    private static void intersectUptoWithPrefetch(PointValues.IntersectVisitor visitor, PointValues.PointTree pointTree, int[] countHolder) throws IOException {
+//        while (countHolder[0] <= 10_000) {
+//            PointValues.Relation compare =
+//                    visitor.compare(pointTree.getMinPackedValue(), pointTree.getMaxPackedValue());
+//            if (compare == PointValues.Relation.CELL_INSIDE_QUERY) {
+//                // This cell is fully inside the query shape: recursively add all points in this cell
+//                // without filtering
+//                pointTree.prep(visitor);
+//            } else if (compare == PointValues.Relation.CELL_CROSSES_QUERY) {
+//                // The cell crosses the shape boundary, or the cell fully contains the query, so we fall
+//                // through and do full filtering:
+//                if (pointTree.moveToChild()) {
+//                    continue;
+//                }
+//                // TODO: we can assert that the first value here in fact matches what the pointTree
+//                // claimed?
+//                // Leaf node; scan and filter all points in this block:
+//                pointTree.visitDocValues(visitor);
+//            }
+//            while (pointTree.moveToSibling() == false) {
+//                if (pointTree.moveToParent() == false) {
+//                    return;
+//                }
+//            }
+//        }
     }
 }
